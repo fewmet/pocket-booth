@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Booth">
+<meta name="theme-color" content="#111317">
+<title>Pocket Booth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Instrument+Sans:wght@400;500;600&family=Unbounded:wght@600;800&display=swap">
+<style>
+/* Layout: sticky header + time ruler, stacked track cards (beat first), transport pinned to the bottom for one-thumb use */
+:root{
+  --bg:#111317; --panel:#1a1d23; --panel2:#232730; --line:#2d323c;
+  --text:#ecebe6; --muted:#8b919d;
+  --amber:#f3a73a; --rec:#ff4b4b; --ok:#5fd39a;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --top:env(safe-area-inset-top,0px); --bot:env(safe-area-inset-bottom,0px);
+  --gl:max(14px,env(safe-area-inset-left,0px)); --gr:max(14px,env(safe-area-inset-right,0px));
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 var(--body)}
+body{min-height:100%;overscroll-behavior-y:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+[hidden]{display:none!important}
+
+.top{position:sticky;top:0;z-index:20;background:var(--bg);padding-top:var(--top);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:8px;padding:10px var(--gr) 8px var(--gl)}
+.brand{font:800 14px/1 var(--display);overflow:hidden;text-overflow:ellipsis;min-width:0;letter-spacing:.02em;margin-right:auto;white-space:nowrap}
+.brand b{color:var(--rec)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:17px;background:var(--panel2);font-weight:600;font-size:13px;white-space:nowrap}
+.chip.warn{background:transparent;box-shadow:inset 0 0 0 1.5px var(--amber);color:var(--amber)}
+.chip .mono{font-family:var(--mono)}
+.iconbtn{width:34px;height:34px;border-radius:17px;background:var(--panel2);display:grid;place-items:center;font-weight:700}
+.chip.lim{padding:0 10px;gap:5px;color:var(--muted)}
+.chip.lim .ld{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.chip.lim.on{color:var(--text)}
+.chip.lim.on .ld{background:var(--ok)}
+.chip.lim.act .ld{background:var(--amber)}
+.switch{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.sw{width:44px;height:26px;border-radius:13px;background:var(--panel2);position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch input:checked+.sw{background:var(--ok)}
+.switch input:checked+.sw::after{transform:translateX(18px);background:#fff}
+.switch input:focus-visible+.sw{outline:2px solid var(--amber);outline-offset:2px}
+.limbody{display:flex;flex-direction:column;gap:12px}
+.limbody.off{opacity:.45}
+.lrow,.mrow{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.lrow label,.mrow span{width:74px;flex:none}
+.lrow input{flex:1;min-width:0;accent-color:var(--amber)}
+.lrow output,.mrow output{min-width:64px;text-align:right;font:12px var(--mono);color:var(--text);font-variant-numeric:tabular-nums}
+.meters{display:flex;flex-direction:column;gap:8px;background:var(--bg);border-radius:10px;padding:12px}
+.mbar{flex:1;min-width:0;height:10px;border-radius:5px;background:var(--panel2);overflow:hidden}
+.mbar i{display:block;height:100%;width:0;background:var(--ok);transition:width .06s linear}
+.mbar i.hot{background:var(--amber)}
+.mbar.gr i{background:var(--amber)}
+.card p.small{font-size:13px}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.rulerrow{display:flex;align-items:stretch;gap:6px;padding:0 var(--gr) 8px var(--gl)}
+#ruler{flex:1;min-width:0;height:30px;border-radius:6px;background:var(--panel);touch-action:pan-y;display:block}
+.zoom{width:30px;border-radius:6px;background:var(--panel);font-weight:700;font-size:17px}
+
+main{display:flex;flex-direction:column;gap:10px;padding:12px var(--gr) calc(130px + var(--bot)) var(--gl)}
+.track{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.th{display:flex;align-items:center;gap:6px;min-width:0}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.tname,.bname{flex:1;min-width:0;background:transparent;border:0;padding:4px 2px;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tname:focus{background:var(--panel2);border-radius:5px;outline:none}
+.tb{width:34px;height:30px;border-radius:6px;background:var(--panel2);font:600 13px var(--mono);color:var(--muted);flex:none}
+.tb.on{background:var(--text);color:var(--bg)}
+.tb.arm{font-size:15px}
+.tb.arm.on{background:var(--rec);color:#fff}
+.lane{display:block;width:100%;height:64px;border-radius:6px;background:var(--bg);touch-action:pan-y}
+.beat .lane{height:54px}
+.loadbeat{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px;border-radius:8px;border:1.5px dashed var(--amber);color:var(--text);text-align:left}
+.loadbeat strong{color:var(--amber);font-size:16px}
+.loadbeat span{color:var(--muted);font-size:13px}
+.takes{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.takes::-webkit-scrollbar{display:none}
+.take{flex:none;height:30px;padding:0 12px;border-radius:15px;background:var(--panel2);font-size:13px;font-weight:600;color:var(--muted)}
+.take.on{background:var(--c);color:#111}
+.hint{color:var(--muted);font-size:13px;padding:5px 0}
+.tk,.tf{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tk label,.tf label{display:flex;align-items:center;gap:8px;flex:1;min-width:180px;font-size:13px;color:var(--muted)}
+.tk input[type=range],.tf input[type=range]{flex:1;min-width:0;accent-color:var(--c)}
+output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
+.ghost{height:30px;padding:0 10px;border-radius:6px;font-size:13px;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.ghost.danger,.btn.danger{color:#fff;background:var(--rec);box-shadow:none}
+.addtrack{height:46px;border-radius:10px;border:1.5px dashed var(--line);color:var(--muted);font-weight:600}
+
+.transport{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);padding:10px var(--gr) calc(10px + var(--bot)) var(--gl)}
+.meter{position:absolute;left:0;top:-1px;height:3px;width:0;background:var(--rec);transition:width .05s linear}
+.tp{display:flex;align-items:center;gap:10px}
+.time{flex:1;font:600 22px/1 var(--mono);font-variant-numeric:tabular-nums;margin-right:auto;min-width:0}
+.time small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:500 11px var(--body);color:var(--muted);margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
+.is-rec .time small{color:var(--rec)}
+.tbtn{width:48px;height:48px;border-radius:50%;background:var(--panel2);display:grid;place-items:center}
+.tbtn svg{width:20px;height:20px;fill:var(--text)}
+.recbtn{width:58px;height:58px;background:var(--rec)}
+.recbtn svg{fill:#fff}
+.is-rec .recbtn{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(255,75,75,.25)}}
+.pre{white-space:nowrap;flex:none;height:38px;padding:0 10px;border-radius:8px;background:var(--panel2);font-size:12px;font-weight:600;color:var(--muted);line-height:1.1}
+.pre b{display:block;color:var(--text);font:600 13px var(--mono)}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + var(--bot));z-index:40;background:var(--text);color:var(--bg);padding:9px 14px;border-radius:8px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);text-align:center}
+
+.sheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+.card{width:100%;max-width:560px;max-height:calc(100% - var(--top) - 20px);overflow-y:auto;background:var(--panel);border-radius:16px 16px 0 0;padding:16px var(--gr) calc(20px + var(--bot)) var(--gl);display:flex;flex-direction:column;gap:14px}
+.card header{display:flex;align-items:center;justify-content:space-between}
+.card h2{margin:0;font:800 17px var(--display)}
+.card h3{margin:0 0 2px;font-size:15px}
+.card p{margin:0;color:var(--muted);font-size:14px;max-width:62ch}
+.bigval{display:flex;align-items:baseline;gap:6px;font:600 46px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--amber)}
+.bigval small{font-size:16px;color:var(--muted)}
+.adj{display:flex;align-items:center;gap:6px}
+.adj input{flex:1;min-width:0;accent-color:var(--amber)}
+.adj button{width:42px;height:34px;border-radius:7px;background:var(--panel2);font:600 13px var(--mono)}
+.test{background:var(--bg);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.btn{height:42px;padding:0 16px;border-radius:9px;background:var(--amber);color:#1b1306;font-weight:700;align-self:flex-start}
+.btn.alt{background:var(--panel2);color:var(--text)}
+.btn:disabled{opacity:.5}
+.result{font-size:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.result .mono{font-family:var(--mono);font-weight:600}
+.tappad{height:150px;border-radius:12px;background:var(--panel2);display:grid;place-items:center;font:800 22px var(--display);color:var(--muted);touch-action:none;user-select:none;-webkit-user-select:none}
+.count{position:fixed;inset:0;z-index:60;display:grid;place-items:center;pointer-events:none;background:rgba(17,19,23,.72)}
+.count span{font:800 min(42vw,190px)/1 var(--display);color:var(--amber);animation:pop .9s ease-out both}
+.count span.go{color:var(--ok)}
+@keyframes pop{0%{transform:scale(1.35);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.92);opacity:.85}}
+.tappad.hit{background:var(--amber);color:#1b1306}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.field select{height:40px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);padding:0 10px}
+.rowbtns{display:flex;flex-direction:column;gap:10px}
+.rowbtns .btn{align-self:stretch}
+@media (prefers-reduced-motion:reduce){.count span{animation:none}.is-rec .recbtn{animation:none}.meter{transition:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="bar">
+    <div class="brand">Pocket B<b>●</b>oth</div>
+    <button class="chip lim" id="limChip" aria-label="Mic limiter"></button>
+    <button class="chip" id="delayChip" aria-label="Audio delay settings"></button>
+    <button class="iconbtn" id="menuBtn" aria-label="Export and project">⋯</button>
+  </div>
+  <div class="rulerrow">
+    <button class="zoom" id="zoomOut" aria-label="Zoom out">−</button>
+    <canvas id="ruler" aria-label="Timeline. Tap to move the playhead, drag to scroll"></canvas>
+    <button class="zoom" id="zoomIn" aria-label="Zoom in">+</button>
+  </div>
+</div>
+
+<main id="tracks"></main>
+
+<div class="transport">
+  <div class="meter" id="meter"></div>
+  <div class="tp">
+    <div class="time"><span id="time">0:00.00</span><small id="status">Stopped</small></div>
+    <button class="pre" id="preBtn" aria-label="Pre-roll before recording">Pre-roll<b id="preVal">0s</b></button>
+    <button class="tbtn" id="rewBtn" aria-label="Back to start"><svg viewBox="0 0 24 24"><path d="M5 5h2.5v14H5zM19 5v14L8.5 12z"/></svg></button>
+    <button class="tbtn" id="playBtn" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 4.5v15L20 12z"/></svg></button>
+    <button class="tbtn recbtn" id="recBtn" aria-label="Record"><svg viewBox="0 0 24 24" id="recIcon"><circle cx="12" cy="12" r="7"/></svg></button>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<div class="count" id="countEl" hidden aria-live="assertive"></div>
+<input type="file" id="fileIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.aif,.aiff" hidden>
+
+<div class="sheet" id="calSheet" hidden>
+  <div class="card" role="dialog" aria-labelledby="calTitle">
+    <header><h2 id="calTitle">Audio delay</h2><button class="iconbtn" data-close aria-label="Close">✕</button></header>
+    <div class="bigval"><span id="calVal">0</span><small>ms</small></div>
+    <p>New takes get pulled earlier by this much, so your vocals land on the beat even when Bluetooth makes you hear it late. Run a test with the same headphones you'll record with.</p>
+    <div class="adj">
+      <button data-step="-10">−10</button><button data-step="-1">−1</button>
+      <input type="range" id="calRange" min="-100" max="600" step="1" aria-label="Delay in milliseconds">
+      <button data-step="1">+1</button><button data-step="10">+10</button>
+    </div>
+
+    <div class="test">
+      <div><h3>Clap test (best for recording)</h3>
+      <p>Headphones on, tap start, then clap along to the clicks you hear for about 10 seconds. On the phone speaker, just stay quiet and let the mic hear the clicks.</p></div>
+      <button class="btn" id="clapBtn">Start clap test</button>
+      <div class="result" id="clapOut"></div>
+    </div>
+
+    <div class="test">
+      <div><h3>Tap test</h3>
+      <p>Same idea as Fortnite Festival's calibration: tap the pad on every click you hear, going by sound, not sight. This only measures playback lag, so the clap test is more accurate for recording.</p></div>
+      <button class="btn alt" id="tapBtn">Start tap test</button>
+      <div class="tappad" id="tapPad" hidden>TAP</div>
+      <div class="result" id="tapOut"></div>
+    </div>
+
+    <label class="field">Microphone
+      <select id="micSel"><option value="">Default</option></select>
+    </label>
+  </div>
+</div>
+
+<div class="sheet" id="limSheet" hidden>
+  <div class="card" role="dialog" aria-labelledby="limTitle">
+    <header><h2 id="limTitle">Mic limiter</h2><button class="iconbtn" data-close aria-label="Close">✕</button></header>
+    <label class="switch"><input type="checkbox" id="limOn"><span class="sw"></span><span>Limit the mic while recording</span></label>
+    <p>Same job as the Fruity Limiter in your KanKan preset: pushes your voice up, then stops it from going past the ceiling so loud parts don't clip. It's printed into new takes, like recording through the mixer FX in FL.</p>
+    <div id="limBody" class="limbody">
+      <div class="lrow"><label for="limGain">Gain</label><input type="range" id="limGain" min="0" max="18" step="0.5"><output id="limGainOut"></output></div>
+      <div class="lrow"><label for="limCeil">Ceiling</label><input type="range" id="limCeil" min="-6" max="0" step="0.1"><output id="limCeilOut"></output></div>
+      <div class="lrow"><label for="limRel">Release</label><input type="range" id="limRel" min="20" max="1000" step="10"><output id="limRelOut"></output></div>
+      <div class="meters">
+        <div class="mrow"><span>Input</span><div class="mbar"><i id="inBar"></i></div><output id="inOut">−∞</output></div>
+        <div class="mrow"><span>Reduction</span><div class="mbar gr"><i id="grBar"></i></div><output id="grOut">0.0</output></div>
+      </div>
+      <p class="small">Aim for a few dB of reduction on your loudest lines. If it's squashing everything, lower the gain.</p>
+    </div>
+    <div class="btnrow"><button class="btn alt" id="limCheck">Check levels</button><button class="btn alt" id="limReset">Reset to preset</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="menuSheet" hidden>
+  <div class="card" role="dialog" aria-labelledby="menuTitle">
+    <header><h2 id="menuTitle">Export</h2><button class="iconbtn" data-close aria-label="Close">✕</button></header>
+    <p>Mix is the beat plus the selected take on every track, as one WAV. Stems give one WAV per vocal track that starts at 0:00, so they line up when you drop them into FL Studio next to the beat.</p>
+    <div class="rowbtns">
+      <button class="btn" id="mixBtn">Make mix</button>
+      <button class="btn alt" id="stemBtn">Make vocal stems</button>
+    </div>
+    <h2>Project</h2>
+    <p>Your session saves on this phone automatically.</p>
+    <button class="btn alt" id="newBtn">New project</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const COLORS = ["#4fd1c5","#f472b6","#a78bfa","#a3e635","#60a5fa","#fb923c"];
+const PEAKS_PER_SEC = 100;
+
+// Defaults read from the Fruity Limiter in KanKan_Record_Preset.fst: +6 dB gain into a 0 dB ceiling.
+const LIM_PRESET = { on: true, gain: 6, ceil: 0, rel: 500 };
+const LIM = { ...LIM_PRESET };
+const S = {
+  beat: null, beatVol: 0.85, beatMute: false, beatSolo: false,
+  tracks: [], pos: 0, preroll: 0,
+  view: { start: 0, pps: 24 },
+  offsetMs: 0, offsetSet: false,
+  micId: ""
+};
+try {
+  const o = localStorage.getItem("pb-offset");
+  if (o !== null) { S.offsetMs = +o; S.offsetSet = true; }
+  S.micId = localStorage.getItem("pb-mic") || "";
+  const l = JSON.parse(localStorage.getItem("pb-lim") || "null");
+  if (l) Object.assign(LIM, l);
+} catch (e) {}
+
+let ctx = null, master = null, beatGain = null;
+let sources = [], play = null, playing = false, recording = false, rec = null;
+let dirty = true, calBusy = false, wakeLock = null;
+
+/* ---------- audio basics ---------- */
+function getCtx() {
+  if (!ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC({ latencyHint: "interactive" });
+    master = ctx.createGain(); master.connect(ctx.destination);
+    beatGain = ctx.createGain(); beatGain.connect(master);
+    S.tracks.forEach(ensureGain);
+    updateGains();
+  }
+  return ctx;
+}
+function ensureGain(t) { if (ctx && !t.gain) { t.gain = ctx.createGain(); t.gain.connect(master); } }
+async function resume() { getCtx(); if (ctx.state !== "running") { try { await ctx.resume(); } catch (e) {} } }
+function decode(ab) {
+  return new Promise((res, rej) => {
+    const p = ctx.decodeAudioData(ab, res, rej);
+    if (p && p.then) p.then(res, rej);
+  });
+}
+function updateGains() {
+  if (!ctx) return;
+  const anySolo = S.beatSolo || S.tracks.some(t => t.solo);
+  beatGain.gain.value = (S.beatMute || (anySolo && !S.beatSolo)) ? 0 : S.beatVol;
+  S.tracks.forEach(t => { ensureGain(t); t.gain.gain.value = (t.mute || (anySolo && !t.solo)) ? 0 : t.vol; });
+}
+function computePeaks(chans, sr) {
+  const bucket = sr / PEAKS_PER_SEC, len = chans[0].length;
+  const n = Math.ceil(len / bucket), out = new Float32Array(n);
+  for (let b = 0; b < n; b++) {
+    const a = Math.floor(b * bucket), z = Math.min(len, Math.floor((b + 1) * bucket));
+    let m = 0;
+    for (const c of chans) for (let i = a; i < z; i++) { const v = c[i] < 0 ? -c[i] : c[i]; if (v > m) m = v; }
+    out[b] = m;
+  }
+  return out;
+}
+function chans(buf) { const a = []; for (let i = 0; i < Math.min(2, buf.numberOfChannels); i++) a.push(buf.getChannelData(i)); return a; }
+function takeStart(k) { return k.start + k.nudge / 1000; }
+function songLen() {
+  let L = S.beat ? S.beat.buffer.duration : 0;
+  S.tracks.forEach(t => t.takes.forEach(k => { L = Math.max(L, takeStart(k) + k.buffer.duration); }));
+  return Math.max(L, 30);
+}
+function curPos() { return playing && play ? play.P + Math.max(0, ctx.currentTime - play.t0) : S.pos; }
+
+/* ---------- transport ---------- */
+function addSrc(buf, dest, t0, P, st) {
+  if (st + buf.duration <= P) return;
+  const s = ctx.createBufferSource(); s.buffer = buf; s.connect(dest);
+  if (st >= P) s.start(t0 + (st - P)); else s.start(t0, P - st);
+  sources.push(s);
+}
+function startPlayback(P, skip) {
+  getCtx(); updateGains();
+  const t0 = ctx.currentTime + 0.06;
+  sources = [];
+  if (S.beat) addSrc(S.beat.buffer, beatGain, t0, P, 0);
+  S.tracks.forEach(t => {
+    if (t === skip) return;
+    const k = t.takes[t.active];
+    if (k) addSrc(k.buffer, t.gain, t0, P, takeStart(k));
+  });
+  play = { t0, P }; playing = true; syncUI();
+}
+function stopSources() {
+  if (playing) S.pos = curPos();
+  sources.forEach(s => { try { s.stop(); } catch (e) {} });
+  sources = []; playing = false; syncUI(); dirty = true;
+}
+function restartIfPlaying() { if (playing && !recording) { const p = curPos(); stopSources(); startPlayback(p); } }
+function seek(t) {
+  if (recording) return;
+  t = Math.max(0, Math.min(songLen(), t));
+  if (playing) { stopSources(); S.pos = t; startPlayback(t); } else S.pos = t;
+  dirty = true; saveSoon();
+}
+
+/* ---------- mic capture ---------- */
+const WORKLET = `
+class Rec extends AudioWorkletProcessor {
+  constructor(){ super(); this.on=false; this.buf=new Float32Array(4096); this.n=0; this.t0=0;
+    this.port.onmessage = e => {
+      if (e.data === 'start') { this.on = true; this.n = 0; }
+      else { this.on = false; if (this.n) this.flush(); this.port.postMessage({ done: 1 }); }
+    };
+  }
+  flush(){ this.port.postMessage({ t: this.t0, d: this.buf.slice(0, this.n) }); this.n = 0; }
+  process(inputs){
+    const ch = inputs[0] && inputs[0][0];
+    if (this.on && ch) {
+      for (let i = 0; i < ch.length; i++) {
+        if (this.n === 0) this.t0 = currentTime + i / sampleRate;
+        this.buf[this.n++] = ch[i];
+        if (this.n === this.buf.length) this.flush();
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('pb-rec', Rec);
+
+// Lookahead peak limiter: input gain, brickwall ceiling, smooth release. 3 ms lookahead is always on so timing never shifts.
+class Lim extends AudioWorkletProcessor {
+  constructor(){ super();
+    this.L = Math.max(1, Math.round(sampleRate * 0.003));
+    this.buf = new Float32Array(this.L); this.nd = new Float32Array(this.L); this.w = 0;
+    this.on = true; this.g = 2; this.ceil = 1; this.env = 1; this.hold = 1; this.hc = 0;
+    this.aAtt = 1 - Math.exp(-1 / (sampleRate * 0.001));
+    this.setRel(500);
+    this.minG = 1; this.pk = 0; this.n = 0;
+    this.port.onmessage = e => { const d = e.data;
+      if ('on' in d) this.on = d.on;
+      if ('gain' in d) this.g = Math.pow(10, d.gain / 20);
+      if ('ceil' in d) this.ceil = Math.pow(10, d.ceil / 20);
+      if ('rel' in d) this.setRel(d.rel);
+    };
+  }
+  setRel(ms){ this.aRel = 1 - Math.exp(-1 / (sampleRate * Math.max(1, ms) / 1000)); }
+  process(inputs, outputs){
+    const inp = inputs[0] && inputs[0][0], out = outputs[0][0], L = this.L;
+    for (let i = 0; i < out.length; i++) {
+      const raw = inp ? inp[i] : 0;
+      const x = this.on ? raw * this.g : raw, a = x < 0 ? -x : x;
+      const need = (this.on && a > this.ceil) ? this.ceil / a : 1;
+      if (need <= this.hold) { this.hold = need; this.hc = L; } else if (this.hc > 0) this.hc--; else this.hold = need;
+      this.env += (this.hold - this.env) * (this.hold < this.env ? this.aAtt : this.aRel);
+      const y = this.buf[this.w], yn = this.nd[this.w];
+      this.buf[this.w] = x; this.nd[this.w] = need; this.w = (this.w + 1) % L;
+      const gg = this.on ? Math.min(this.env, yn) : 1;
+      out[i] = y * gg;
+      if (gg < this.minG) this.minG = gg;
+      if (a > this.pk) this.pk = a;
+    }
+    this.n += out.length;
+    if (this.n >= 2048) { this.port.postMessage({ gr: this.minG, pk: this.pk }); this.n = 0; this.minG = 1; this.pk = 0; }
+    return true;
+  }
+}
+registerProcessor('pb-lim', Lim);`;
+
+const mic = { stream: null, src: null };
+const cap = {
+  node: null, lim: null, worklet: false, on: false, onChunk: null, onDone: null,
+  async init() {
+    if (this.node) return;
+    const sink = ctx.createGain(); sink.gain.value = 0; sink.connect(ctx.destination);
+    try {
+      const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+      await ctx.audioWorklet.addModule(url);
+      this.node = new AudioWorkletNode(ctx, "pb-rec", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      this.worklet = true;
+      this.lim = new AudioWorkletNode(ctx, "pb-lim", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      this.lim.connect(this.node);
+      this.lim.port.onmessage = e => limMeter(e.data);
+      sendLim();
+      this.node.port.onmessage = e => {
+        if (e.data.done) { const r = this.onDone; this.onDone = null; if (r) r(); }
+        else if (this.onChunk) this.onChunk(e.data.t, e.data.d);
+      };
+    } catch (err) {
+      // Older browsers: ScriptProcessor. Its timing bias is constant, so calibration absorbs it.
+      this.node = ctx.createScriptProcessor(4096, 1, 1);
+      this.node.onaudioprocess = e => {
+        if (this.on && this.onChunk) this.onChunk(e.playbackTime - 4096 / ctx.sampleRate, new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+    }
+    this.node.connect(sink);
+  },
+  start(fn) { this.onChunk = fn; if (this.worklet) this.node.port.postMessage("start"); else this.on = true; },
+  stop() {
+    return new Promise(r => {
+      if (this.worklet) { this.onDone = () => { this.onChunk = null; r(); }; this.node.port.postMessage("stop"); }
+      else { this.on = false; this.onChunk = null; r(); }
+    });
+  }
+};
+
+async function ensureMic() {
+  await resume();
+  if (mic.stream && mic.stream.active) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("insecure");
+  try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch (e) {}
+  const c = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: S.micId ? { ...c, deviceId: { exact: S.micId } } : c });
+  } catch (e) {
+    if (!S.micId || e.name === "NotAllowedError") throw e;
+    stream = await navigator.mediaDevices.getUserMedia({ audio: c });
+  }
+  mic.stream = stream;
+  mic.src = ctx.createMediaStreamSource(stream);
+  await cap.init();
+  mic.src.connect(cap.lim || cap.node);
+  listMics();
+}
+function dropMic() {
+  if (mic.stream) mic.stream.getTracks().forEach(t => t.stop());
+  if (mic.src) try { mic.src.disconnect(); } catch (e) {}
+  mic.stream = null; mic.src = null;
+}
+function micError(e) {
+  if (e && e.message === "insecure") toast("The mic only works when this page is opened from an https:// address.");
+  else if (e && e.name === "NotAllowedError") toast("Mic access was blocked. Allow it in your browser's site settings.");
+  else toast("Couldn't open the mic.");
+}
+async function listMics() {
+  try {
+    const ds = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+    $("#micSel").innerHTML = '<option value="">Default</option>' +
+      ds.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === S.micId ? "selected" : ""}>${esc(d.label || "Microphone " + (i + 1))}</option>`).join("");
+  } catch (e) {}
+}
+
+/* ---------- recording ---------- */
+async function startRec() {
+  if (calBusy) return;
+  let t = S.tracks.find(x => x.armed);
+  if (!t) { t = S.tracks[0] || addTrack(); S.tracks.forEach(x => x.armed = x === t); render(); }
+  try { await ensureMic(); } catch (e) { return micError(e); }
+  if (playing) stopSources();
+  const from = S.pos, P = Math.max(0, from - S.preroll);
+  const r = { track: t, from, P, chunks: [], peaks: [], curMax: 0, cnt: 0, bucket: ctx.sampleRate / PEAKS_PER_SEC, firstT: null, t0: 0, liveStart: P, level: 0, offset: S.offsetMs };
+  rec = r;
+  cap.start((tt, d) => {
+    if (r.firstT === null) { r.firstT = tt; r.liveStart = r.P + (tt - r.t0) - r.offset / 1000; }
+    r.chunks.push(d);
+    let lv = 0;
+    for (let i = 0; i < d.length; i++) {
+      const v = d[i] < 0 ? -d[i] : d[i];
+      if (v > r.curMax) r.curMax = v;
+      if (v > lv) lv = v;
+      if (++r.cnt >= r.bucket) { r.peaks.push(r.curMax); r.curMax = 0; r.cnt = 0; }
+    }
+    r.level = Math.max(lv, r.level * 0.8);
+  });
+  startPlayback(P, t);
+  r.t0 = play.t0;
+  recording = true; syncUI();
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+async function finishRec() {
+  if (!rec || rec.finishing) return;
+  const r = rec; r.finishing = true; recording = false;
+  await cap.stop();
+  stopSources();
+  rec = null; S.pos = r.from; $("#meter").style.width = "0";
+  try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+  const sr = ctx.sampleRate;
+  const len = r.chunks.reduce((a, c) => a + c.length, 0);
+  if (len < sr * 0.25 || r.firstT === null) { toast("Take was too short, so it wasn't kept."); render(); return; }
+  const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  let o = 0; r.chunks.forEach(c => { d.set(c, o); o += c.length; });
+  const t = r.track;
+  const k = { id: "k" + Date.now(), name: "Take " + (++t.takeN), buffer: buf, start: r.P + (r.firstT - r.t0) - r.offset / 1000, nudge: 0, peaks: computePeaks([d], sr) };
+  t.takes.push(k); t.active = t.takes.length - 1;
+  saveTake(k); render(); saveSoon();
+  toast(`${t.name}: ${k.name} saved`);
+}
+
+/* ---------- tracks ---------- */
+function newTrack(name) {
+  const used = S.tracks.map(t => t.color);
+  const color = COLORS.find(c => !used.includes(c)) || COLORS[S.tracks.length % COLORS.length];
+  const t = { id: "t" + Date.now() + Math.floor(Math.random() * 1000), name, color, vol: 1, mute: false, solo: false, armed: false, active: -1, takeN: 0, takes: [], gain: null };
+  ensureGain(t);
+  return t;
+}
+function addTrack() {
+  const t = newTrack("Vocals " + (S.tracks.length + 1));
+  if (!S.tracks.some(x => x.armed)) t.armed = true;
+  S.tracks.push(t); updateGains(); saveSoon();
+  return t;
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function sign(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
+
+function beatHTML() {
+  const b = S.beat;
+  return `<section class="track beat" data-id="beat" style="--c:var(--amber)">
+    <div class="th"><span class="dot"></span><span class="bname">${b ? esc(b.name) : "Beat"}</span>
+      <button class="tb ${S.beatMute ? "on" : ""}" data-act="mute" aria-pressed="${S.beatMute}">M</button>
+      <button class="tb ${S.beatSolo ? "on" : ""}" data-act="solo" aria-pressed="${S.beatSolo}">S</button></div>
+    ${b ? `<canvas class="lane" data-lane="beat"></canvas>` :
+      `<button class="loadbeat" data-act="load"><strong>Load a beat</strong><span>MP3, WAV, M4A, or anything else your phone can play</span></button>`}
+    <div class="tf"><label><span>Vol</span><input type="range" id="vol-beat" min="0" max="1.5" step="0.01" value="${S.beatVol}" data-act="vol"></label>
+      ${b ? `<button class="ghost" data-act="load">Replace beat</button>` : ""}</div>
+  </section>`;
+}
+function trackHTML(t) {
+  const k = t.takes[t.active];
+  return `<section class="track" data-id="${t.id}" style="--c:${t.color}">
+    <div class="th"><span class="dot"></span>
+      <input class="tname" id="name-${t.id}" value="${esc(t.name)}" data-act="name" aria-label="Track name">
+      <button class="tb arm ${t.armed ? "on" : ""}" data-act="arm" aria-pressed="${t.armed}" aria-label="Record on this track">●</button>
+      <button class="tb ${t.mute ? "on" : ""}" data-act="mute" aria-pressed="${t.mute}">M</button>
+      <button class="tb ${t.solo ? "on" : ""}" data-act="solo" aria-pressed="${t.solo}">S</button></div>
+    <canvas class="lane" data-lane="${t.id}"></canvas>
+    <div class="takes">${t.takes.length
+      ? t.takes.map((x, i) => `<button class="take ${i === t.active ? "on" : ""}" data-act="take" data-i="${i}">${esc(x.name)}</button>`).join("")
+      : `<span class="hint">${t.armed ? "Armed. Hit the red button to record a take." : "Tap ● to record on this track."}</span>`}</div>
+    ${k ? `<div class="tk"><label><span>Nudge</span><input type="range" id="nudge-${t.id}" min="-250" max="250" step="1" value="${k.nudge}" data-act="nudge"><output>${sign(k.nudge)} ms</output></label>
+      <button class="ghost" data-act="deltake">Delete take</button></div>` : ""}
+    <div class="tf"><label><span>Vol</span><input type="range" id="vol-${t.id}" min="0" max="1.5" step="0.01" value="${t.vol}" data-act="vol"></label>
+      <button class="ghost" data-act="deltrack">Remove track</button></div>
+  </section>`;
+}
+let lanes = [];
+function render() {
+  $("#tracks").innerHTML = beatHTML() + S.tracks.map(trackHTML).join("") + `<button class="addtrack" id="addTrack">+ Add track</button>`;
+  lanes = [...document.querySelectorAll("canvas.lane")];
+  syncUI(); dirty = true;
+}
+function laneItems(id) {
+  if (id === "beat") return S.beat ? [{ peaks: S.beat.peaks, start: 0, color: "#f3a73a" }] : [];
+  const t = S.tracks.find(x => x.id === id); if (!t) return [];
+  const out = [];
+  const k = t.takes[t.active];
+  if (k && !(rec && rec.track === t)) out.push({ peaks: k.peaks, start: takeStart(k), color: t.color });
+  if (rec && rec.track === t) out.push({ peaks: rec.peaks, start: rec.liveStart, color: "#ff4b4b" });
+  return out;
+}
+
+/* ---------- drawing ---------- */
+function fit(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  return { g, w, h };
+}
+function gridStep(pps) { for (const s of [0.5, 1, 2, 5, 10, 15, 30, 60, 120]) if (s * pps >= 64) return s; return 240; }
+function fmt(t, cs = true) {
+  t = Math.max(0, t);
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return cs ? `${m}:${s < 10 ? "0" : ""}${s.toFixed(2)}` : `${m}:${String(Math.floor(s)).padStart(2, "0")}`;
+}
+function drawLane(cv, items, pos) {
+  const { g, w, h } = fit(cv), { start: v0, pps } = S.view, step = gridStep(pps);
+  g.fillStyle = "#1f232a";
+  for (let t = Math.ceil(v0 / step) * step; t < v0 + w / pps; t += step) g.fillRect(Math.round((t - v0) * pps), 0, 1, h);
+  const mid = h / 2;
+  for (const it of items) {
+    const dur = it.peaks.length / PEAKS_PER_SEC, x0 = (it.start - v0) * pps, x1 = x0 + dur * pps;
+    if (x1 < 0 || x0 > w) continue;
+    const a0 = Math.max(0, Math.floor(x0)), a1 = Math.min(w, Math.ceil(x1));
+    g.globalAlpha = 0.13; g.fillStyle = it.color; g.fillRect(a0, 2, a1 - a0, h - 4);
+    g.globalAlpha = 1;
+    for (let x = a0; x < a1; x++) {
+      const t = v0 + x / pps - it.start;
+      const b0 = Math.floor(t * PEAKS_PER_SEC), b1 = Math.max(b0 + 1, Math.floor((t + 1 / pps) * PEAKS_PER_SEC));
+      let m = 0;
+      for (let b = Math.max(0, b0); b < b1 && b < it.peaks.length; b++) if (it.peaks[b] > m) m = it.peaks[b];
+      const amp = Math.max(0.5, Math.min(1, m * 1.3) * (mid - 4));
+      g.fillRect(x, mid - amp, 1, amp * 2);
+    }
+  }
+  const px = (pos - v0) * pps;
+  if (px >= -1 && px <= w + 1) { g.fillStyle = recording ? "#ff4b4b" : "#ecebe6"; g.fillRect(Math.round(px) - 1, 0, 2, h); }
+}
+function drawRuler(pos) {
+  const cv = $("#ruler"), { g, w, h } = fit(cv), { start: v0, pps } = S.view, step = gridStep(pps);
+  g.font = "11px 'IBM Plex Mono', monospace"; g.textBaseline = "middle";
+  const end = (songLen() - v0) * pps;
+  if (end < w) { g.fillStyle = "#111317"; g.fillRect(Math.max(0, end), 0, w, h); }
+  for (let t = Math.ceil(v0 / step) * step; t < v0 + w / pps; t += step) {
+    const x = Math.round((t - v0) * pps);
+    g.fillStyle = "#3a404b"; g.fillRect(x, h - 8, 1, 8);
+    g.fillStyle = "#8b919d"; g.fillText(fmt(t, false), x + 4, h / 2 - 2);
+  }
+  const px = (pos - v0) * pps;
+  if (px >= -6 && px <= w + 6) {
+    g.fillStyle = recording ? "#ff4b4b" : "#f3a73a";
+    g.beginPath(); g.moveTo(px - 6, 0); g.lineTo(px + 6, 0); g.lineTo(px, 9); g.closePath(); g.fill();
+    g.fillRect(Math.round(px) - 1, 0, 2, h);
+  }
+}
+function tick() {
+  if (playing) {
+    const p = curPos();
+    if (!recording && p > songLen() + 0.25) { stopSources(); S.pos = 0; }
+    const w = $("#ruler").clientWidth / S.view.pps;
+    if (p > S.view.start + w * 0.85) S.view.start = p - w * 0.15;
+    if (rec) $("#meter").style.width = Math.min(100, rec.level * 110) + "%";
+    dirty = true;
+  }
+  if (dirty) {
+    dirty = false;
+    const p = curPos();
+    lanes.forEach(cv => drawLane(cv, laneItems(cv.dataset.lane), p));
+    drawRuler(p);
+    $("#time").textContent = fmt(p);
+  }
+  requestAnimationFrame(tick);
+}
+function syncUI() {
+  document.body.classList.toggle("is-rec", recording);
+  $("#playIcon").innerHTML = playing && !recording ? '<path d="M6 4.5h4.5v15H6zM13.5 4.5H18v15h-4.5z"/>' : '<path d="M7 4.5v15L20 12z"/>';
+  $("#playBtn").setAttribute("aria-label", playing ? "Stop" : "Play");
+  $("#recIcon").innerHTML = recording ? '<rect x="6" y="6" width="12" height="12" rx="2"/>' : '<circle cx="12" cy="12" r="7"/>';
+  $("#recBtn").setAttribute("aria-label", recording ? "Stop recording" : "Record");
+  const armed = S.tracks.find(t => t.armed);
+  $("#status").textContent = recording ? `Recording · ${rec ? rec.track.name : ""}` : playing ? "Playing" : armed ? `Armed · ${armed.name}` : "Stopped";
+  $("#preVal").textContent = S.preroll + "s";
+  const chip = $("#delayChip");
+  chip.className = "chip" + (S.offsetSet ? "" : " warn");
+  chip.innerHTML = S.offsetSet ? `Delay <span class="mono">${S.offsetMs} ms</span>` : "Set delay";
+}
+
+/* ---------- timeline gestures ---------- */
+function bindPan(el) {
+  let sx = null, sv = 0, moved = false;
+  el.addEventListener("pointerdown", e => { sx = e.clientX; sv = S.view.start; moved = false; });
+  el.addEventListener("pointermove", e => {
+    if (sx === null) return;
+    const dx = e.clientX - sx;
+    if (!moved && Math.abs(dx) > 6) { moved = true; try { el.setPointerCapture(e.pointerId); } catch (er) {} }
+    if (moved) { S.view.start = Math.max(0, Math.min(songLen() - 1, sv - dx / S.view.pps)); dirty = true; }
+  });
+  const end = e => {
+    if (sx === null) return;
+    if (!moved && e.type === "pointerup") { const r = el.getBoundingClientRect(); seek(S.view.start + (e.clientX - r.left) / S.view.pps); }
+    sx = null;
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+bindPan($("#ruler"));
+new MutationObserver(() => lanes.forEach(cv => { if (!cv.dataset.bound) { cv.dataset.bound = 1; bindPan(cv); } })).observe($("#tracks"), { childList: true });
+function zoom(f) {
+  const p = curPos(), w = $("#ruler").clientWidth;
+  const rel = (p - S.view.start) * S.view.pps;
+  S.view.pps = Math.max(3, Math.min(400, S.view.pps * f));
+  S.view.start = Math.max(0, p - (rel >= 0 && rel <= w ? rel : w / 2) / S.view.pps);
+  dirty = true; saveSoon();
+}
+$("#zoomIn").onclick = () => zoom(1.6);
+$("#zoomOut").onclick = () => zoom(1 / 1.6);
+window.addEventListener("resize", () => dirty = true);
+
+/* ---------- track events ---------- */
+function confirmTap(btn, label, fn) {
+  if (btn.dataset.sure) { fn(); return; }
+  btn.dataset.sure = 1; const old = btn.textContent; btn.textContent = label; btn.classList.add("danger");
+  setTimeout(() => { if (btn.isConnected) { delete btn.dataset.sure; btn.textContent = old; btn.classList.remove("danger"); } }, 2500);
+}
+$("#tracks").addEventListener("click", async e => {
+  if (e.target.closest("#addTrack")) { addTrack(); render(); return; }
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const id = btn.closest(".track").dataset.id, act = btn.dataset.act;
+  if (id === "beat") {
+    if (act === "load") { if (recording) return; $("#fileIn").click(); }
+    if (act === "mute") { S.beatMute = !S.beatMute; updateGains(); render(); saveSoon(); }
+    if (act === "solo") { S.beatSolo = !S.beatSolo; updateGains(); render(); saveSoon(); }
+    return;
+  }
+  const t = S.tracks.find(x => x.id === id); if (!t) return;
+  if (act === "arm") { if (recording) return; const on = !t.armed; S.tracks.forEach(x => x.armed = false); t.armed = on; render(); saveSoon(); }
+  if (act === "mute") { t.mute = !t.mute; updateGains(); render(); saveSoon(); }
+  if (act === "solo") { t.solo = !t.solo; updateGains(); render(); saveSoon(); }
+  if (act === "take") { if (recording) return; t.active = +btn.dataset.i; render(); saveSoon(); restartIfPlaying(); }
+  if (act === "deltake") {
+    if (recording) return;
+    confirmTap(btn, "Tap again to delete", () => {
+      const k = t.takes[t.active]; if (!k) return;
+      t.takes.splice(t.active, 1); t.active = Math.min(t.active, t.takes.length - 1);
+      DB.del("take:" + k.id); render(); saveSoon(); restartIfPlaying();
+    });
+  }
+  if (act === "deltrack") {
+    if (recording) return;
+    confirmTap(btn, "Tap again to remove", () => {
+      t.takes.forEach(k => DB.del("take:" + k.id));
+      if (t.gain) t.gain.disconnect();
+      S.tracks = S.tracks.filter(x => x !== t);
+      render(); saveSoon(); restartIfPlaying();
+    });
+  }
+});
+$("#tracks").addEventListener("input", e => {
+  const el = e.target, act = el.dataset.act; if (!act) return;
+  const id = el.closest(".track").dataset.id;
+  if (id === "beat") { if (act === "vol") { S.beatVol = +el.value; updateGains(); saveSoon(); } return; }
+  const t = S.tracks.find(x => x.id === id); if (!t) return;
+  if (act === "vol") { t.vol = +el.value; updateGains(); saveSoon(); }
+  if (act === "name") { t.name = el.value || "Untitled"; syncUI(); saveSoon(); }
+  if (act === "nudge") { const k = t.takes[t.active]; k.nudge = +el.value; el.nextElementSibling.textContent = sign(k.nudge) + " ms"; dirty = true; saveSoon(); }
+});
+$("#tracks").addEventListener("change", e => { if (e.target.dataset.act === "nudge") restartIfPlaying(); });
+
+$("#fileIn").addEventListener("change", async () => {
+  const f = $("#fileIn").files[0]; $("#fileIn").value = ""; if (!f) return;
+  getCtx();
+  toast("Loading beat…", 60000);
+  try {
+    const raw = await f.arrayBuffer();
+    const buf = await decode(raw.slice(0));
+    if (playing) stopSources();
+    S.beat = { name: f.name.replace(/\.[^.]+$/, ""), buffer: buf, peaks: computePeaks(chans(buf), buf.sampleRate) };
+    S.pos = 0; S.view.start = 0;
+    S.view.pps = Math.max(3, Math.min(60, $("#ruler").clientWidth / Math.min(buf.duration, 40)));
+    render(); toast("Beat loaded");
+    DB.put("beat", { name: S.beat.name, data: raw }).catch(() => {});
+    saveSoon();
+  } catch (e) { toast("Couldn't read that file. Try an MP3, WAV or M4A."); }
+});
+
+/* ---------- transport buttons ---------- */
+$("#playBtn").onclick = async () => {
+  if (calBusy) return;
+  await resume();
+  if (recording) return finishRec();
+  if (playing) { stopSources(); saveSoon(); } else startPlayback(S.pos);
+};
+$("#recBtn").onclick = async () => {
+  await resume();
+  if (recording) return finishRec();
+  startRec();
+};
+$("#rewBtn").onclick = () => {
+  if (recording) return;
+  const was = playing; if (playing) stopSources();
+  S.pos = 0; S.view.start = 0; dirty = true;
+  if (was) startPlayback(0);
+};
+$("#preBtn").onclick = () => {
+  const opts = [0, 1, 2, 4]; S.preroll = opts[(opts.indexOf(S.preroll) + 1) % opts.length];
+  syncUI(); saveSoon();
+};
+
+/* ---------- toast & sheets ---------- */
+let toastT = 0;
+function toast(msg, ms = 2600) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, ms); }
+function openSheet(id) { $(id).hidden = false; }
+document.querySelectorAll(".sheet").forEach(sh => {
+  sh.addEventListener("click", e => { if ((e.target === sh || e.target.closest("[data-close]")) && !calBusy) sh.hidden = true; });
+});
+$("#menuBtn").onclick = () => { resetExport(); openSheet("#menuSheet"); };
+$("#delayChip").onclick = () => { setOffsetUI(); openSheet("#calSheet"); if (mic.stream) listMics(); };
+
+/* ---------- mic limiter ---------- */
+function sendLim() { if (cap.lim) cap.lim.port.postMessage({ ...LIM }); }
+function saveLim() { try { localStorage.setItem("pb-lim", JSON.stringify(LIM)); } catch (e) {} }
+function limUI() {
+  $("#limOn").checked = LIM.on;
+  $("#limGain").value = LIM.gain; $("#limGainOut").textContent = (LIM.gain > 0 ? "+" : "") + LIM.gain.toFixed(1) + " dB";
+  $("#limCeil").value = LIM.ceil; $("#limCeilOut").textContent = LIM.ceil.toFixed(1) + " dB";
+  $("#limRel").value = LIM.rel; $("#limRelOut").textContent = Math.round(LIM.rel) + " ms";
+  $("#limBody").classList.toggle("off", !LIM.on);
+  const c = $("#limChip"); c.classList.toggle("on", LIM.on);
+  c.innerHTML = `<span class="ld"></span>Lim`;
+  c.setAttribute("aria-label", "Mic limiter " + (LIM.on ? "on" : "off"));
+}
+function setLim(k, v) { LIM[k] = v; sendLim(); saveLim(); limUI(); }
+$("#limOn").addEventListener("change", e => setLim("on", e.target.checked));
+$("#limGain").addEventListener("input", e => setLim("gain", +e.target.value));
+$("#limCeil").addEventListener("input", e => setLim("ceil", +e.target.value));
+$("#limRel").addEventListener("input", e => setLim("rel", +e.target.value));
+$("#limReset").onclick = () => { Object.assign(LIM, LIM_PRESET); sendLim(); saveLim(); limUI(); toast("Back to the KanKan preset settings"); };
+$("#limChip").onclick = () => { limUI(); openSheet("#limSheet"); };
+$("#limCheck").onclick = async () => {
+  try { await ensureMic(); $("#limCheck").textContent = "Mic is live"; $("#limCheck").disabled = true; } catch (e) { micError(e); }
+};
+let grT = 0;
+function limMeter(d) {
+  const db = v => 20 * Math.log10(Math.max(v, 1e-6));
+  const pk = db(d.pk), gr = -db(d.gr);
+  $("#inBar").style.width = Math.max(0, Math.min(100, (pk + 48) / 60 * 100)) + "%";
+  $("#inBar").classList.toggle("hot", pk > LIM.ceil);
+  $("#inOut").textContent = pk < -60 ? "−∞" : (pk > 0 ? "+" : "") + pk.toFixed(1);
+  $("#grBar").style.width = Math.min(100, gr / 18 * 100) + "%";
+  $("#grOut").textContent = gr < 0.05 ? "0.0" : "−" + gr.toFixed(1);
+  const c = $("#limChip");
+  if (gr > 0.5) { c.classList.add("act"); clearTimeout(grT); grT = setTimeout(() => c.classList.remove("act"), 160); }
+}
+
+/* ---------- delay calibration ---------- */
+function setOffset(ms) {
+  S.offsetMs = Math.max(-100, Math.min(600, Math.round(ms))); S.offsetSet = true;
+  try { localStorage.setItem("pb-offset", S.offsetMs); } catch (e) {}
+  setOffsetUI(); syncUI();
+}
+function setOffsetUI() { $("#calVal").textContent = S.offsetMs; $("#calRange").value = S.offsetMs; }
+$("#calRange").addEventListener("input", e => setOffset(+e.target.value));
+document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => setOffset(S.offsetMs + +b.dataset.step));
+$("#micSel").addEventListener("change", e => {
+  S.micId = e.target.value; try { localStorage.setItem("pb-mic", S.micId); } catch (er) {}
+  dropMic(); toast("Mic changed");
+});
+
+function clickAt(at, hi) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = hi ? 1760 : 1320;
+  g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(0.9, at + 0.002); g.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
+  o.connect(g); g.connect(master); o.start(at); o.stop(at + 0.07);
+}
+function waitUntil(t, onStep) {
+  return new Promise(r => { const iv = setInterval(() => { if (onStep) onStep(); if (ctx.currentTime >= t) { clearInterval(iv); r(); } }, 50); });
+}
+function beepAt(at, freq) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, at); g.gain.linearRampToValueAtTime(0.35, at + 0.01); g.gain.exponentialRampToValueAtTime(0.001, at + 0.18);
+  o.connect(g); g.connect(master); o.start(at); o.stop(at + 0.2);
+}
+// 3-2-1 countdown with a soft beep on each number. Resolves the moment "Go" appears.
+async function countdown(from = 3) {
+  const el = $("#countEl"), c0 = ctx.currentTime + 0.15;
+  for (let i = 0; i < from; i++) beepAt(c0 + i, 587);
+  beepAt(c0 + from, 880);
+  let shown = null;
+  const show = v => { if (v === shown) return; shown = v; el.innerHTML = `<span class="${v === "Go" ? "go" : ""}">${v}</span>`; };
+  el.hidden = false; show(from);
+  await waitUntil(c0 + from, () => { const k = from - Math.floor(ctx.currentTime - c0); show(k > 0 ? k : "Go"); });
+  show("Go");
+  setTimeout(() => { el.hidden = true; el.innerHTML = ""; }, 650);
+}
+function median(a) { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function spreadOf(a) { const m = median(a); return median(a.map(x => Math.abs(x - m))); }
+function resultHTML(ms, spread, n, extra) {
+  const q = spread < 0.012 ? "consistent" : spread < 0.03 ? "a bit loose, a second run could help" : "all over the place, try again";
+  return `<span><span class="mono">${ms} ms</span> from ${n} hits, ${q}.${extra || ""}</span><button class="btn" data-use="${ms}">Use ${ms} ms</button>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-use]"); if (b) { setOffset(+b.dataset.use); toast(`Delay set to ${b.dataset.use} ms`); } });
+
+$("#clapBtn").onclick = async () => {
+  if (calBusy || recording) return;
+  const out = $("#clapOut"), btn = $("#clapBtn");
+  if (playing) stopSources();
+  try { await ensureMic(); } catch (e) { return micError(e); }
+  calBusy = true; btn.disabled = true; out.textContent = "Get ready…";
+  await countdown();
+  const N = 14, gap = 0.75, chunks = []; let firstT = null;
+  cap.start((t, d) => { if (firstT === null) firstT = t; chunks.push(d); });
+  const t0 = ctx.currentTime + 0.6, clicks = [];
+  for (let i = 0; i < N; i++) { clicks.push(t0 + i * gap); clickAt(t0 + i * gap, i % 4 === 0); }
+  await waitUntil(t0 + N * gap + 0.7, () => {
+    const i = Math.floor((ctx.currentTime - t0) / gap) + 1;
+    out.textContent = i < 1 ? "Get ready…" : i <= N ? `Clap along · ${i} of ${N}` : "Listening…";
+  });
+  await cap.stop();
+  calBusy = false; btn.disabled = false; btn.textContent = "Run clap test again";
+  const sr = ctx.sampleRate, win = Math.max(1, Math.round(sr / 1000));
+  const total = chunks.reduce((a, c) => a + c.length, 0);
+  if (!total || firstT === null) { out.textContent = "The mic didn't send any audio. Check mic access and try again."; return; }
+  const all = new Float32Array(total); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
+  const env = new Float32Array(Math.floor(total / win));
+  let mx = 0;
+  for (let i = 0; i < env.length; i++) { let m = 0; for (let j = i * win; j < (i + 1) * win; j++) { const v = all[j] < 0 ? -all[j] : all[j]; if (v > m) m = v; } env[i] = m; if (m > mx) mx = m; }
+  if (mx < 0.01) { out.textContent = "Didn't hear any claps. Clap closer to the phone and try again."; return; }
+  const floor = median(Array.from(env.filter((_, i) => i % 7 === 0)));
+  const thr = Math.max(floor * 5, mx * 0.22);
+  const onsets = []; let last = -1e9;
+  for (let i = 0; i < env.length; i++) if (env[i] > thr && i - last > 250) { onsets.push(firstT + (i * win) / sr); last = i; }
+  const ds = [];
+  clicks.slice(2).forEach(c => { const hit = onsets.find(x => x - c > -0.12 && x - c < 0.6); if (hit !== undefined) ds.push(hit - c); });
+  if (ds.length < 5) { out.textContent = `Only caught ${ds.length} claps lined up with clicks. Clap a little louder, right on each click.`; return; }
+  out.innerHTML = resultHTML(Math.round(median(ds) * 1000), spreadOf(ds), ds.length);
+};
+
+$("#tapBtn").onclick = async () => {
+  if (calBusy || recording) return;
+  await resume(); if (playing) stopSources();
+  const out = $("#tapOut"), btn = $("#tapBtn"), pad = $("#tapPad");
+  calBusy = true; btn.disabled = true; pad.hidden = false; out.textContent = "Get ready…";
+  await countdown();
+  const N = 14, gap = 0.8, taps = [], clicks = [];
+  const t0 = ctx.currentTime + 0.6;
+  for (let i = 0; i < N; i++) { clicks.push(t0 + i * gap); clickAt(t0 + i * gap, i % 4 === 0); }
+  const onTap = e => {
+    e.preventDefault();
+    const lag = Math.max(0, performance.now() - e.timeStamp) / 1000;
+    taps.push(ctx.currentTime - (lag < 0.5 ? lag : 0));
+    pad.classList.add("hit"); setTimeout(() => pad.classList.remove("hit"), 90);
+  };
+  pad.addEventListener("pointerdown", onTap);
+  await waitUntil(t0 + N * gap + 0.6, () => {
+    const i = Math.floor((ctx.currentTime - t0) / gap) + 1;
+    out.textContent = i < 1 ? "Get ready…" : i <= N ? `Tap on each click · ${i} of ${N}` : "Done";
+  });
+  pad.removeEventListener("pointerdown", onTap);
+  pad.hidden = true; calBusy = false; btn.disabled = false; btn.textContent = "Run tap test again";
+  const ds = [];
+  clicks.slice(3).forEach(c => { const hit = taps.find(x => x - c > -0.2 && x - c < 0.58); if (hit !== undefined) ds.push(hit - c); });
+  if (ds.length < 5) { out.textContent = `Only ${ds.length} taps lined up. Tap on every click and try again.`; return; }
+  out.innerHTML = resultHTML(Math.round(median(ds) * 1000), spreadOf(ds), ds.length);
+};
+
+/* ---------- export ---------- */
+function wav(channels, sr) {
+  const n = channels[0].length, ch = channels.length, buf = new ArrayBuffer(44 + n * ch * 2), v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, "RIFF"); v.setUint32(4, 36 + n * ch * 2, true); ws(8, "WAVE"); ws(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true);
+  v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); ws(36, "data"); v.setUint32(40, n * ch * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const s = Math.max(-1, Math.min(1, channels[c][i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+  return new Blob([buf], { type: "audio/wav" });
+}
+function safeName(s) { return s.replace(/[\\/:*?"<>|]+/g, "").trim() || "track"; }
+async function makeMix() {
+  getCtx();
+  const sr = ctx.sampleRate, len = Math.ceil(songLen() * sr);
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const oc = new OAC(2, len, sr);
+  const anySolo = S.beatSolo || S.tracks.some(t => t.solo);
+  const add = (buf, st, vol) => {
+    if (!vol) return;
+    const g = oc.createGain(); g.gain.value = vol; g.connect(oc.destination);
+    const s = oc.createBufferSource(); s.buffer = buf; s.connect(g);
+    if (st >= 0) s.start(st); else if (-st < buf.duration) s.start(0, -st);
+  };
+  if (S.beat) add(S.beat.buffer, 0, (S.beatMute || (anySolo && !S.beatSolo)) ? 0 : S.beatVol);
+  S.tracks.forEach(t => { const k = t.takes[t.active]; if (k) add(k.buffer, takeStart(k), (t.mute || (anySolo && !t.solo)) ? 0 : t.vol); });
+  const out = await new Promise((res, rej) => {
+    oc.oncomplete = e => res(e.renderedBuffer);
+    const p = oc.startRendering(); if (p && p.then) p.then(res, rej);
+  });
+  const base = S.beat ? safeName(S.beat.name) : "pocket-booth";
+  return [new File([wav([out.getChannelData(0), out.getChannelData(1)], sr)], `${base} - mix.wav`, { type: "audio/wav" })];
+}
+function makeStems() {
+  const files = [], sr = ctx.sampleRate, len = Math.ceil(songLen() * sr);
+  S.tracks.forEach(t => {
+    const k = t.takes[t.active]; if (!k) return;
+    const src = k.buffer.getChannelData(0), out = new Float32Array(len);
+    const ratio = k.buffer.sampleRate / sr, off = Math.round(takeStart(k) * sr);
+    for (let i = 0; i < len; i++) { const j = Math.round((i - off) * ratio); if (j >= 0 && j < src.length) out[i] = src[j]; }
+    files.push(new File([wav([out], sr)], `${safeName(t.name)} - ${safeName(k.name)}.wav`, { type: "audio/wav" }));
+  });
+  return files;
+}
+let ready = { mix: null, stems: null };
+function resetExport() {
+  ready = { mix: null, stems: null };
+  $("#mixBtn").textContent = "Make mix"; $("#stemBtn").textContent = "Make vocal stems";
+}
+async function shareFiles(files) {
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  files.forEach((f, i) => setTimeout(() => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }, i * 400));
+}
+// Two taps on purpose: phones only allow the share sheet right after a tap, and rendering takes a moment.
+$("#mixBtn").onclick = async () => {
+  const b = $("#mixBtn");
+  if (ready.mix) return shareFiles(ready.mix);
+  if (!S.beat && !S.tracks.some(t => t.takes.length)) return toast("Nothing to export yet.");
+  b.disabled = true; b.textContent = "Rendering…";
+  try { ready.mix = await makeMix(); b.textContent = "Share mix (.wav)"; } catch (e) { b.textContent = "Make mix"; toast("Couldn't render the mix."); }
+  b.disabled = false;
+};
+$("#stemBtn").onclick = () => {
+  const b = $("#stemBtn");
+  if (ready.stems) return shareFiles(ready.stems);
+  if (!S.tracks.some(t => t.takes.length)) return toast("Record a take first.");
+  b.disabled = true; b.textContent = "Rendering…";
+  setTimeout(() => {
+    try { getCtx(); ready.stems = makeStems(); b.textContent = `Share ${ready.stems.length} stem${ready.stems.length > 1 ? "s" : ""} (.wav)`; }
+    catch (e) { b.textContent = "Make vocal stems"; toast("Couldn't render the stems."); }
+    b.disabled = false;
+  }, 30);
+};
+$("#newBtn").onclick = () => confirmTap($("#newBtn"), "Tap again to erase everything", async () => {
+  if (recording) return;
+  if (playing) stopSources();
+  S.tracks.forEach(t => t.gain && t.gain.disconnect());
+  S.beat = null; S.tracks = []; S.pos = 0; S.view.start = 0; S.beatMute = S.beatSolo = false; S.beatVol = 0.85;
+  addTrack();
+  try { await DB.clear(); } catch (e) {}
+  saveSoon(); render(); $("#menuSheet").hidden = true; toast("New project");
+});
+
+/* ---------- saving (IndexedDB on this device) ---------- */
+const DB = {
+  db: null,
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("pocket-booth", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => { this.db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  tx(mode, fn) {
+    return new Promise((res, rej) => {
+      if (!this.db) return rej(new Error("no db"));
+      const tx = this.db.transaction("kv", mode), st = tx.objectStore("kv"), req = fn(st);
+      tx.oncomplete = () => res(req && req.result); tx.onerror = () => rej(tx.error);
+    });
+  },
+  get(k) { return this.tx("readonly", st => st.get(k)); },
+  put(k, v) { return this.tx("readwrite", st => st.put(v, k)); },
+  del(k) { return this.tx("readwrite", st => st.delete(k)).catch(() => {}); },
+  clear() { return this.tx("readwrite", st => st.clear()); }
+};
+let saveT = 0;
+function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveMeta, 700); }
+function saveMeta() {
+  const m = {
+    v: 1, hasBeat: !!S.beat, beatVol: S.beatVol, beatMute: S.beatMute, beatSolo: S.beatSolo,
+    pos: S.pos, preroll: S.preroll, pps: S.view.pps, vstart: S.view.start,
+    tracks: S.tracks.map(t => ({ id: t.id, name: t.name, color: t.color, vol: t.vol, mute: t.mute, solo: t.solo, armed: t.armed, active: t.active, takeN: t.takeN,
+      takes: t.takes.map(k => ({ id: k.id, name: k.name, start: k.start, nudge: k.nudge })) }))
+  };
+  DB.put("meta", m).catch(() => {});
+}
+function saveTake(k) {
+  const f = k.buffer.getChannelData(0), q = new Int16Array(f.length);
+  for (let i = 0; i < f.length; i++) { const s = Math.max(-1, Math.min(1, f[i])); q[i] = s < 0 ? s * 0x8000 : s * 0x7fff; }
+  DB.put("take:" + k.id, { sr: k.buffer.sampleRate, data: q }).catch(() => toast("Couldn't save that take on this phone (storage full?)"));
+}
+async function boot() {
+  addTrack(); render(); requestAnimationFrame(tick);
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  try {
+    await DB.open();
+    const m = await DB.get("meta");
+    if (!m) { saveMeta(); return; }
+    getCtx();
+    Object.assign(S, { beatVol: m.beatVol, beatMute: m.beatMute, beatSolo: m.beatSolo, pos: m.pos || 0, preroll: m.preroll || 0 });
+    S.view.pps = m.pps || 24; S.view.start = m.vstart || 0;
+    if (m.hasBeat) {
+      const b = await DB.get("beat");
+      if (b) { const buf = await decode(b.data.slice(0)); S.beat = { name: b.name, buffer: buf, peaks: computePeaks(chans(buf), buf.sampleRate) }; }
+    }
+    S.tracks.forEach(t => t.gain && t.gain.disconnect());
+    S.tracks = [];
+    for (const mt of m.tracks) {
+      const t = Object.assign(newTrack(mt.name), { id: mt.id, color: mt.color, vol: mt.vol, mute: mt.mute, solo: mt.solo, armed: mt.armed, takeN: mt.takeN || 0, takes: [] });
+      for (const mk of mt.takes) {
+        const d = await DB.get("take:" + mk.id); if (!d) continue;
+        const buf = ctx.createBuffer(1, d.data.length, d.sr), f = buf.getChannelData(0);
+        for (let i = 0; i < f.length; i++) f[i] = d.data[i] / 32768;
+        t.takes.push({ id: mk.id, name: mk.name, start: mk.start, nudge: mk.nudge || 0, buffer: buf, peaks: computePeaks([f], d.sr) });
+      }
+      t.active = Math.min(mt.active, t.takes.length - 1);
+      S.tracks.push(t);
+    }
+    if (!S.tracks.length) addTrack();
+    updateGains(); render();
+  } catch (e) { console.warn(e); }
+}
+document.addEventListener("pointerdown", () => { if (ctx && ctx.state !== "running") ctx.resume(); }, { capture: true });
+limUI();
+boot();
+</script>
+</body>
+</html>
