@@ -89,6 +89,7 @@ main{display:flex;flex-direction:column;gap:10px;padding:12px var(--gr) calc(130
 .takes::-webkit-scrollbar{display:none}
 .take{flex:none;height:30px;padding:0 12px;border-radius:15px;background:var(--panel2);font-size:13px;font-weight:600;color:var(--muted)}
 .take.on{background:var(--c);color:#111}
+.take.off{text-decoration:line-through;opacity:.6}
 .hint{color:var(--muted);font-size:13px;padding:5px 0}
 .tk,.tf{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tk label,.tf label{display:flex;align-items:center;gap:8px;flex:1;min-width:180px;font-size:13px;color:var(--muted)}
@@ -232,7 +233,7 @@ output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
 <div class="sheet" id="menuSheet" hidden>
   <div class="card" role="dialog" aria-labelledby="menuTitle">
     <header><h2 id="menuTitle">Export</h2><button class="iconbtn" data-close aria-label="Close">✕</button></header>
-    <p>Mix is the beat plus the selected take on every track, as one WAV. Stems give one WAV per vocal track that starts at 0:00, so they line up when you drop them into FL Studio next to the beat.</p>
+    <p>Mix is the beat plus every take that's turned on, as one WAV. Stems give one WAV per vocal track that starts at 0:00, so they line up when you drop them into FL Studio next to the beat.</p>
     <div class="rowbtns">
       <button class="btn" id="mixBtn">Make mix</button>
       <button class="btn alt" id="stemBtn">Make vocal stems</button>
@@ -329,11 +330,7 @@ function startPlayback(P, skip) {
   const t0 = ctx.currentTime + 0.06;
   sources = [];
   if (S.beat) addSrc(S.beat.buffer, beatGain, t0, P, 0);
-  S.tracks.forEach(t => {
-    if (t === skip) return;
-    const k = t.takes[t.active];
-    if (k) addSrc(k.buffer, t.gain, t0, P, takeStart(k));
-  });
+  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) addSrc(k.buffer, t.gain, t0, P, takeStart(k)); }));
   play = { t0, P }; playing = true; syncUI();
 }
 function stopSources() {
@@ -571,10 +568,11 @@ function trackHTML(t) {
       <button class="tb ${t.solo ? "on" : ""}" data-act="solo" aria-pressed="${t.solo}">S</button></div>
     <canvas class="lane" data-lane="${t.id}"></canvas>
     <div class="takes">${t.takes.length
-      ? t.takes.map((x, i) => `<button class="take ${i === t.active ? "on" : ""}" data-act="take" data-i="${i}">${esc(x.name)}</button>`).join("")
-      : `<span class="hint">${t.armed ? "Armed. Hit the red button to record a take." : "Tap ● to record on this track."}</span>`}</div>
+      ? t.takes.map((x, i) => `<button class="take ${i === t.active ? "on" : ""} ${x.off ? "off" : ""}" data-act="take" data-i="${i}" aria-pressed="${i === t.active}">${esc(x.name)} · ${fmt(takeStart(x), false)}${x.off ? " · off" : ""}</button>`).join("")
+      : `<span class="hint">${t.armed ? "Armed. Hit the red button to record here, as many times as you want." : "Tap ● to record on this track."}</span>`}</div>
     ${k ? `<div class="tk"><label><span>Nudge</span><input type="range" id="nudge-${t.id}" min="-250" max="250" step="1" value="${k.nudge}" data-act="nudge"><output>${sign(k.nudge)} ms</output></label>
-      <button class="ghost" data-act="deltake">Delete take</button></div>` : ""}
+      <button class="ghost" data-act="deltake">Delete take</button></div>
+      <div class="hint">Every take on this track plays. Tap the selected take again to turn it off or back on.</div>` : ""}
     <div class="tf"><label><span>Vol</span><input type="range" id="vol-${t.id}" min="0" max="1.5" step="0.01" value="${t.vol}" data-act="vol"></label>
       <button class="ghost" data-act="deltrack">Remove track</button></div>
   </section>`;
@@ -589,8 +587,7 @@ function laneItems(id) {
   if (id === "beat") return S.beat ? [{ peaks: S.beat.peaks, start: 0, color: "#f3a73a" }] : [];
   const t = S.tracks.find(x => x.id === id); if (!t) return [];
   const out = [];
-  const k = t.takes[t.active];
-  if (k && !(rec && rec.track === t)) out.push({ peaks: k.peaks, start: takeStart(k), color: t.color });
+  t.takes.forEach((k, i) => out.push({ peaks: k.peaks, start: takeStart(k), color: t.color, sel: i === t.active, off: k.off }));
   if (rec && rec.track === t) out.push({ peaks: rec.peaks, start: rec.liveStart, color: "#ff4b4b" });
   return out;
 }
@@ -617,8 +614,10 @@ function drawLane(cv, items, pos) {
     const dur = it.peaks.length / PEAKS_PER_SEC, x0 = (it.start - v0) * pps, x1 = x0 + dur * pps;
     if (x1 < 0 || x0 > w) continue;
     const a0 = Math.max(0, Math.floor(x0)), a1 = Math.min(w, Math.ceil(x1));
-    g.globalAlpha = 0.13; g.fillStyle = it.color; g.fillRect(a0, 2, a1 - a0, h - 4);
-    g.globalAlpha = 1;
+    const dim = it.off ? 0.3 : 1;
+    g.globalAlpha = (it.sel ? 0.24 : 0.11) * dim; g.fillStyle = it.color; g.fillRect(a0, 2, a1 - a0, h - 4);
+    if (it.sel) { g.globalAlpha = dim; g.fillRect(a0, 2, a1 - a0, 2); }
+    g.globalAlpha = dim;
     for (let x = a0; x < a1; x++) {
       const t = v0 + x / pps - it.start;
       const b0 = Math.floor(t * PEAKS_PER_SEC), b1 = Math.max(b0 + 1, Math.floor((t + 1 / pps) * PEAKS_PER_SEC));
@@ -627,6 +626,7 @@ function drawLane(cv, items, pos) {
       const amp = Math.max(0.5, Math.min(1, m * 1.3) * (mid - 4));
       g.fillRect(x, mid - amp, 1, amp * 2);
     }
+    g.globalAlpha = 1;
   }
   const px = (pos - v0) * pps;
   if (px >= -1 && px <= w + 1) { g.fillStyle = recording ? "#ff4b4b" : "#ecebe6"; g.fillRect(Math.round(px) - 1, 0, 2, h); }
@@ -731,7 +731,17 @@ $("#tracks").addEventListener("click", async e => {
   if (act === "arm") { if (recording) return; const on = !t.armed; S.tracks.forEach(x => x.armed = false); t.armed = on; render(); saveSoon(); }
   if (act === "mute") { t.mute = !t.mute; updateGains(); render(); saveSoon(); }
   if (act === "solo") { t.solo = !t.solo; updateGains(); render(); saveSoon(); }
-  if (act === "take") { if (recording) return; t.active = +btn.dataset.i; render(); saveSoon(); restartIfPlaying(); }
+  if (act === "take") {
+    if (recording) return;
+    const i = +btn.dataset.i, k = t.takes[i];
+    if (t.active === i) k.off = !k.off;
+    else {
+      t.active = i;
+      const w = $("#ruler").clientWidth / S.view.pps, st = takeStart(k);
+      if (st < S.view.start || st > S.view.start + w * 0.9) S.view.start = Math.max(0, st - w * 0.1);
+    }
+    render(); saveSoon(); restartIfPlaying();
+  }
   if (act === "deltake") {
     if (recording) return;
     confirmTap(btn, "Tap again to delete", () => {
@@ -1002,7 +1012,7 @@ async function makeMix() {
     if (st >= 0) s.start(st); else if (-st < buf.duration) s.start(0, -st);
   };
   if (S.beat) add(S.beat.buffer, 0, (S.beatMute || (anySolo && !S.beatSolo)) ? 0 : S.beatVol);
-  S.tracks.forEach(t => { const k = t.takes[t.active]; if (k) add(k.buffer, takeStart(k), (t.mute || (anySolo && !t.solo)) ? 0 : t.vol); });
+  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) add(k.buffer, takeStart(k), (t.mute || (anySolo && !t.solo)) ? 0 : t.vol); }));
   const out = await new Promise((res, rej) => {
     oc.oncomplete = e => res(e.renderedBuffer);
     const p = oc.startRendering(); if (p && p.then) p.then(res, rej);
@@ -1013,11 +1023,14 @@ async function makeMix() {
 function makeStems() {
   const files = [], sr = ctx.sampleRate, len = Math.ceil(songLen() * sr);
   S.tracks.forEach(t => {
-    const k = t.takes[t.active]; if (!k) return;
-    const src = k.buffer.getChannelData(0), out = new Float32Array(len);
-    const ratio = k.buffer.sampleRate / sr, off = Math.round(takeStart(k) * sr);
-    for (let i = 0; i < len; i++) { const j = Math.round((i - off) * ratio); if (j >= 0 && j < src.length) out[i] = src[j]; }
-    files.push(new File([wav([out], sr)], `${safeName(t.name)} - ${safeName(k.name)}.wav`, { type: "audio/wav" }));
+    const ks = t.takes.filter(k => !k.off); if (!ks.length) return;
+    const out = new Float32Array(len);
+    ks.forEach(k => {
+      const src = k.buffer.getChannelData(0), ratio = k.buffer.sampleRate / sr, off = Math.round(takeStart(k) * sr);
+      const a = Math.max(0, off), z = Math.min(len, off + Math.ceil(src.length / ratio));
+      for (let i = a; i < z; i++) { const j = Math.round((i - off) * ratio); if (j >= 0 && j < src.length) out[i] += src[j]; }
+    });
+    files.push(new File([wav([out], sr)], `${safeName(t.name)}.wav`, { type: "audio/wav" }));
   });
   return files;
 }
@@ -1060,7 +1073,7 @@ $("#newBtn").onclick = () => confirmTap($("#newBtn"), "Tap again to erase everyt
   if (playing) stopSources();
   S.tracks.forEach(t => t.gain && t.gain.disconnect());
   S.beat = null; S.tracks = []; S.pos = 0; S.view.start = 0; S.beatMute = S.beatSolo = false; S.beatVol = 0.85;
-  addTrack();
+  addTrack(); addTrack();
   try { await DB.clear(); } catch (e) {}
   saveSoon(); render(); $("#menuSheet").hidden = true; toast("New project");
 });
@@ -1095,7 +1108,7 @@ function saveMeta() {
     v: 1, hasBeat: !!S.beat, beatVol: S.beatVol, beatMute: S.beatMute, beatSolo: S.beatSolo,
     pos: S.pos, preroll: S.preroll, pps: S.view.pps, vstart: S.view.start,
     tracks: S.tracks.map(t => ({ id: t.id, name: t.name, color: t.color, vol: t.vol, mute: t.mute, solo: t.solo, armed: t.armed, active: t.active, takeN: t.takeN,
-      takes: t.takes.map(k => ({ id: k.id, name: k.name, start: k.start, nudge: k.nudge })) }))
+      takes: t.takes.map(k => ({ id: k.id, name: k.name, start: k.start, nudge: k.nudge, off: !!k.off })) }))
   };
   DB.put("meta", m).catch(() => {});
 }
@@ -1105,7 +1118,7 @@ function saveTake(k) {
   DB.put("take:" + k.id, { sr: k.buffer.sampleRate, data: q }).catch(() => toast("Couldn't save that take on this phone (storage full?)"));
 }
 async function boot() {
-  addTrack(); render(); requestAnimationFrame(tick);
+  addTrack(); addTrack(); render(); requestAnimationFrame(tick);
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   try {
     await DB.open();
@@ -1126,7 +1139,7 @@ async function boot() {
         const d = await DB.get("take:" + mk.id); if (!d) continue;
         const buf = ctx.createBuffer(1, d.data.length, d.sr), f = buf.getChannelData(0);
         for (let i = 0; i < f.length; i++) f[i] = d.data[i] / 32768;
-        t.takes.push({ id: mk.id, name: mk.name, start: mk.start, nudge: mk.nudge || 0, buffer: buf, peaks: computePeaks([f], d.sr) });
+        t.takes.push({ id: mk.id, name: mk.name, start: mk.start, nudge: mk.nudge || 0, off: !!mk.off, buffer: buf, peaks: computePeaks([f], d.sr) });
       }
       t.active = Math.min(mt.active, t.takes.length - 1);
       S.tracks.push(t);
