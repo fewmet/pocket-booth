@@ -137,6 +137,7 @@ output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
 .count span{font:800 min(42vw,190px)/1 var(--display);color:var(--amber);animation:pop .9s ease-out both}
 .count span.go{color:var(--ok)}
 @keyframes pop{0%{transform:scale(1.35);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.92);opacity:.85}}
+.tappad.wait{opacity:.5;font-size:18px}
 .tappad.hit{background:var(--amber);color:#1b1306}
 .field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
 .field select{height:40px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);padding:0 10px}
@@ -197,7 +198,7 @@ output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
 
     <div class="test">
       <div><h3>Tap test</h3>
-      <p>Same idea as Fortnite Festival's calibration: tap the pad on every click you hear, going by sound, not sight. This only measures playback lag, so the clap test is more accurate for recording.</p></div>
+      <p>Same idea as Fortnite Festival's calibration: you hear 4 clicks to get the tempo, then tap the pad on each of the next 24, going by sound, not sight. This only measures playback lag, so the clap test is more accurate for recording.</p></div>
       <button class="btn alt" id="tapBtn">Start tap test</button>
       <div class="tappad" id="tapPad" hidden>TAP</div>
       <div class="result" id="tapOut"></div>
@@ -936,9 +937,15 @@ $("#tapBtn").onclick = async () => {
   const out = $("#tapOut"), btn = $("#tapBtn"), pad = $("#tapPad");
   calBusy = true; btn.disabled = true; pad.hidden = false; out.textContent = "Get ready…";
   await countdown();
-  const N = 14, gap = 0.8, taps = [], clicks = [];
-  const t0 = ctx.currentTime + 0.6;
-  for (let i = 0; i < N; i++) { clicks.push(t0 + i * gap); clickAt(t0 + i * gap, i % 4 === 0); }
+  // 4 listen-only beats to lock in the tempo, then 24 beats to tap. Same steady tempo all the way through.
+  const INTRO = 4, N = 24, gap = 0.6, taps = [], clicks = [];
+  const t0 = ctx.currentTime + 0.6, tTap = t0 + INTRO * gap;
+  for (let i = 0; i < INTRO + N; i++) {
+    const at = t0 + i * gap;
+    clickAt(at, i % 4 === 0);
+    if (i >= INTRO) clicks.push(at);
+  }
+  pad.textContent = "LISTEN"; pad.classList.add("wait");
   const onTap = e => {
     e.preventDefault();
     const lag = Math.max(0, performance.now() - e.timeStamp) / 1000;
@@ -946,15 +953,27 @@ $("#tapBtn").onclick = async () => {
     pad.classList.add("hit"); setTimeout(() => pad.classList.remove("hit"), 90);
   };
   pad.addEventListener("pointerdown", onTap);
-  await waitUntil(t0 + N * gap + 0.6, () => {
-    const i = Math.floor((ctx.currentTime - t0) / gap) + 1;
-    out.textContent = i < 1 ? "Get ready…" : i <= N ? `Tap on each click · ${i} of ${N}` : "Done";
+  await waitUntil(tTap + N * gap + 0.5, () => {
+    const now = ctx.currentTime;
+    if (now < tTap - gap * 0.5) {
+      const i = Math.max(1, Math.min(INTRO, Math.floor((now - t0) / gap) + 1));
+      out.textContent = now < t0 ? "Get ready…" : `Just listen · ${i} of ${INTRO}`;
+    } else {
+      if (pad.classList.contains("wait")) { pad.classList.remove("wait"); pad.textContent = "TAP"; }
+      const i = Math.max(1, Math.floor((now - tTap) / gap) + 1);
+      out.textContent = i <= N ? `Tap on each click · ${i} of ${N}` : "Done";
+    }
   });
   pad.removeEventListener("pointerdown", onTap);
+  pad.classList.remove("wait"); pad.textContent = "TAP";
   pad.hidden = true; calBusy = false; btn.disabled = false; btn.textContent = "Run tap test again";
-  const ds = [];
-  clicks.slice(3).forEach(c => { const hit = taps.find(x => x - c > -0.2 && x - c < 0.58); if (hit !== undefined) ds.push(hit - c); });
-  if (ds.length < 5) { out.textContent = `Only ${ds.length} taps lined up. Tap on every click and try again.`; return; }
+  // Match each click to the first tap near it, skip the first 2 while you settle in, then drop wild misses.
+  let ds = [];
+  clicks.slice(2).forEach(c => { const hit = taps.find(x => x - c > -0.15 && x - c < gap - 0.16); if (hit !== undefined) ds.push(hit - c); });
+  if (ds.length < 8) { out.textContent = `Only ${ds.length} taps lined up. Tap on every click and try again.`; return; }
+  const m0 = median(ds), sp0 = Math.max(0.015, spreadOf(ds));
+  const kept = ds.filter(x => Math.abs(x - m0) <= sp0 * 3.5);
+  if (kept.length >= 8) ds = kept;
   out.innerHTML = resultHTML(Math.round(median(ds) * 1000), spreadOf(ds), ds.length);
 };
 
