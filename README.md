@@ -1,5 +1,7 @@
 # Pocket Booth
 
+> **Heads up:** this is a fully vibecoded test app. It's probably broken in places, so don't count on it for anything important.
+
 A phone recorder for vocals over a beat, in one web page.
 
 - Load any audio file as the beat, then record takes on as many vocal tracks as you want
