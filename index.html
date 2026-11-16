@@ -96,6 +96,7 @@ main{display:flex;flex-direction:column;gap:10px;padding:12px var(--gr) calc(130
 .tk input[type=range],.tf input[type=range]{flex:1;min-width:0;accent-color:var(--c)}
 output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
 .ghost{height:30px;padding:0 10px;border-radius:6px;font-size:13px;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.ghost.lit{background:var(--c);color:#111;box-shadow:none;font-weight:600}
 .ghost.danger,.btn.danger{color:#fff;background:var(--rec);box-shadow:none}
 .addtrack{height:46px;border-radius:10px;border:1.5px dashed var(--line);color:var(--muted);font-weight:600}
 
@@ -233,7 +234,7 @@ output{font:12px var(--mono);color:var(--text);min-width:58px;text-align:right}
 <div class="sheet" id="menuSheet" hidden>
   <div class="card" role="dialog" aria-labelledby="menuTitle">
     <header><h2 id="menuTitle">Export</h2><button class="iconbtn" data-close aria-label="Close">✕</button></header>
-    <p>Mix is the beat plus every take that's turned on, as one WAV. Stems give one WAV per vocal track that starts at 0:00, so they line up when you drop them into FL Studio next to the beat.</p>
+    <p>Mix is the beat plus every take that's turned on, as one WAV. Normalize is included when it's on. Stems give one WAV per vocal track that starts at 0:00, so they line up when you drop them into FL Studio next to the beat.</p>
     <div class="rowbtns">
       <button class="btn" id="mixBtn">Make mix</button>
       <button class="btn alt" id="stemBtn">Make vocal stems</button>
@@ -319,9 +320,16 @@ function songLen() {
 function curPos() { return playing && play ? play.P + Math.max(0, ctx.currentTime - play.t0) : S.pos; }
 
 /* ---------- transport ---------- */
-function addSrc(buf, dest, t0, P, st) {
+// Normalize works like FL Studio's: each clip is turned up until its loudest peak sits at 0 dB.
+function normGain(t, k) {
+  if (!t.norm) return 1;
+  if (k.pk === undefined) { let m = 0; for (const v of k.peaks) if (v > m) m = v; k.pk = m; }
+  return k.pk > 0.003 ? 1 / k.pk : 1;
+}
+function addSrc(buf, dest, t0, P, st, g) {
   if (st + buf.duration <= P) return;
-  const s = ctx.createBufferSource(); s.buffer = buf; s.connect(dest);
+  const s = ctx.createBufferSource(); s.buffer = buf;
+  if (g && g !== 1) { const gn = ctx.createGain(); gn.gain.value = g; s.connect(gn); gn.connect(dest); } else s.connect(dest);
   if (st >= P) s.start(t0 + (st - P)); else s.start(t0, P - st);
   sources.push(s);
 }
@@ -330,7 +338,7 @@ function startPlayback(P, skip) {
   const t0 = ctx.currentTime + 0.06;
   sources = [];
   if (S.beat) addSrc(S.beat.buffer, beatGain, t0, P, 0);
-  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) addSrc(k.buffer, t.gain, t0, P, takeStart(k)); }));
+  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) addSrc(k.buffer, t.gain, t0, P, takeStart(k), normGain(t, k)); }));
   play = { t0, P }; playing = true; syncUI();
 }
 function stopSources() {
@@ -574,6 +582,7 @@ function trackHTML(t) {
       <button class="ghost" data-act="deltake">Delete take</button></div>
       <div class="hint">Every take on this track plays. Tap the selected take again to turn it off or back on.</div>` : ""}
     <div class="tf"><label><span>Vol</span><input type="range" id="vol-${t.id}" min="0" max="1.5" step="0.01" value="${t.vol}" data-act="vol"></label>
+      <button class="ghost ${t.norm ? "lit" : ""}" data-act="norm" aria-pressed="${!!t.norm}">Normalize</button>
       <button class="ghost" data-act="deltrack">Remove track</button></div>
   </section>`;
 }
@@ -587,7 +596,7 @@ function laneItems(id) {
   if (id === "beat") return S.beat ? [{ peaks: S.beat.peaks, start: 0, color: "#f3a73a" }] : [];
   const t = S.tracks.find(x => x.id === id); if (!t) return [];
   const out = [];
-  t.takes.forEach((k, i) => out.push({ peaks: k.peaks, start: takeStart(k), color: t.color, sel: i === t.active, off: k.off }));
+  t.takes.forEach((k, i) => out.push({ peaks: k.peaks, start: takeStart(k), color: t.color, sel: i === t.active, off: k.off, scale: normGain(t, k) }));
   if (rec && rec.track === t) out.push({ peaks: rec.peaks, start: rec.liveStart, color: "#ff4b4b" });
   return out;
 }
@@ -623,7 +632,7 @@ function drawLane(cv, items, pos) {
       const b0 = Math.floor(t * PEAKS_PER_SEC), b1 = Math.max(b0 + 1, Math.floor((t + 1 / pps) * PEAKS_PER_SEC));
       let m = 0;
       for (let b = Math.max(0, b0); b < b1 && b < it.peaks.length; b++) if (it.peaks[b] > m) m = it.peaks[b];
-      const amp = Math.max(0.5, Math.min(1, m * 1.3) * (mid - 4));
+      const amp = Math.max(0.5, Math.min(1, m * (it.scale || 1) * 1.3) * (mid - 4));
       g.fillRect(x, mid - amp, 1, amp * 2);
     }
     g.globalAlpha = 1;
@@ -731,6 +740,7 @@ $("#tracks").addEventListener("click", async e => {
   if (act === "arm") { if (recording) return; const on = !t.armed; S.tracks.forEach(x => x.armed = false); t.armed = on; render(); saveSoon(); }
   if (act === "mute") { t.mute = !t.mute; updateGains(); render(); saveSoon(); }
   if (act === "solo") { t.solo = !t.solo; updateGains(); render(); saveSoon(); }
+  if (act === "norm") { t.norm = !t.norm; render(); saveSoon(); restartIfPlaying(); toast(t.norm ? `${t.name}: normalized` : `${t.name}: normalize off`); }
   if (act === "take") {
     if (recording) return;
     const i = +btn.dataset.i, k = t.takes[i];
@@ -1012,7 +1022,7 @@ async function makeMix() {
     if (st >= 0) s.start(st); else if (-st < buf.duration) s.start(0, -st);
   };
   if (S.beat) add(S.beat.buffer, 0, (S.beatMute || (anySolo && !S.beatSolo)) ? 0 : S.beatVol);
-  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) add(k.buffer, takeStart(k), (t.mute || (anySolo && !t.solo)) ? 0 : t.vol); }));
+  S.tracks.forEach(t => t.takes.forEach(k => { if (!k.off) add(k.buffer, takeStart(k), ((t.mute || (anySolo && !t.solo)) ? 0 : t.vol) * normGain(t, k)); }));
   const out = await new Promise((res, rej) => {
     oc.oncomplete = e => res(e.renderedBuffer);
     const p = oc.startRendering(); if (p && p.then) p.then(res, rej);
@@ -1026,9 +1036,9 @@ function makeStems() {
     const ks = t.takes.filter(k => !k.off); if (!ks.length) return;
     const out = new Float32Array(len);
     ks.forEach(k => {
-      const src = k.buffer.getChannelData(0), ratio = k.buffer.sampleRate / sr, off = Math.round(takeStart(k) * sr);
+      const ng = normGain(t, k), src = k.buffer.getChannelData(0), ratio = k.buffer.sampleRate / sr, off = Math.round(takeStart(k) * sr);
       const a = Math.max(0, off), z = Math.min(len, off + Math.ceil(src.length / ratio));
-      for (let i = a; i < z; i++) { const j = Math.round((i - off) * ratio); if (j >= 0 && j < src.length) out[i] += src[j]; }
+      for (let i = a; i < z; i++) { const j = Math.round((i - off) * ratio); if (j >= 0 && j < src.length) out[i] += src[j] * ng; }
     });
     files.push(new File([wav([out], sr)], `${safeName(t.name)}.wav`, { type: "audio/wav" }));
   });
@@ -1107,7 +1117,7 @@ function saveMeta() {
   const m = {
     v: 1, hasBeat: !!S.beat, beatVol: S.beatVol, beatMute: S.beatMute, beatSolo: S.beatSolo,
     pos: S.pos, preroll: S.preroll, pps: S.view.pps, vstart: S.view.start,
-    tracks: S.tracks.map(t => ({ id: t.id, name: t.name, color: t.color, vol: t.vol, mute: t.mute, solo: t.solo, armed: t.armed, active: t.active, takeN: t.takeN,
+    tracks: S.tracks.map(t => ({ id: t.id, name: t.name, color: t.color, vol: t.vol, mute: t.mute, solo: t.solo, armed: t.armed, active: t.active, takeN: t.takeN, norm: !!t.norm,
       takes: t.takes.map(k => ({ id: k.id, name: k.name, start: k.start, nudge: k.nudge, off: !!k.off })) }))
   };
   DB.put("meta", m).catch(() => {});
@@ -1134,7 +1144,7 @@ async function boot() {
     S.tracks.forEach(t => t.gain && t.gain.disconnect());
     S.tracks = [];
     for (const mt of m.tracks) {
-      const t = Object.assign(newTrack(mt.name), { id: mt.id, color: mt.color, vol: mt.vol, mute: mt.mute, solo: mt.solo, armed: mt.armed, takeN: mt.takeN || 0, takes: [] });
+      const t = Object.assign(newTrack(mt.name), { id: mt.id, color: mt.color, vol: mt.vol, mute: mt.mute, solo: mt.solo, armed: mt.armed, takeN: mt.takeN || 0, norm: !!mt.norm, takes: [] });
       for (const mk of mt.takes) {
         const d = await DB.get("take:" + mk.id); if (!d) continue;
         const buf = ctx.createBuffer(1, d.data.length, d.sr), f = buf.getChannelData(0);
